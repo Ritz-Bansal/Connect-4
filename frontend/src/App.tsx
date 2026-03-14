@@ -15,7 +15,7 @@ export function App() {
 
   const startGame = async () => {
     setWaiting(true);
-    const socket = new WebSocket("ws://localhost:8080");
+    const socket = new WebSocket("wss://connect-4-1-q323.onrender.com");
 
     socket.onopen = () => {
       console.log("Connected to server");
@@ -49,6 +49,8 @@ export function App() {
 
       if (data.message && (data.message.includes("won") || data.message === "Draw" || data.message === "Vapas se masti")) {
         setGameOverMessage(data.message);
+      } else if (data.message && ["Incorrect inputs", "Nahi chalega", "Not your turn"].includes(data.message)) {
+        alert(data.message);
       }
     };
 
@@ -62,6 +64,14 @@ export function App() {
 
   const sendMove = () => {
     if (!ws || gameOverMessage) return;
+
+    // Check if it's actually the player's turn before parsing move
+    const isPlayer1 = myColor === "RED";
+    if ((isPlayer1 && currentTurn !== 0) || (!isPlayer1 && currentTurn !== 1)) {
+      alert(`It's Player ${currentTurn + 1}'s turn right now`);
+      return;
+    }
+
     const colNum = parseInt(inputCol);
     if (!isNaN(colNum) && colNum >= 1 && colNum <= 7) {
       ws.send(JSON.stringify({ type: "MOVE", column: colNum }));
@@ -98,15 +108,15 @@ export function App() {
         ) : (
           <div className="flex flex-col items-center w-full space-y-3 sm:space-y-4">
             <div className="flex flex-col items-center space-y-1 sm:space-y-2 bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl shadow-md w-full max-w-md border border-gray-200">
-              <div className="flex items-center justify-between w-full text-lg font-semibold text-gray-800">
+              <div className="flex items-center justify-between w-full text-base sm:text-lg font-semibold text-gray-800">
                 <span className="flex items-center gap-2">
                   You are:
                   <div
-                    className={`w-6 h-6 rounded-full shadow-inner border border-black/10 ${myColor === "RED" ? "bg-red-500" : "bg-yellow-400"}`}
+                    className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full shadow-inner border border-black/10 ${myColor === "RED" ? "bg-red-500" : "bg-yellow-400"}`}
                   ></div>
                   {myColor}
                 </span>
-                <span className="bg-gray-100 px-4 py-1 rounded-lg border border-gray-200 block">
+                <span className="bg-gray-100 px-3 py-1 rounded-lg border border-gray-200 block text-sm sm:text-base">
                   Turn: Player {currentTurn + 1}
                   {((currentTurn === 0 && myColor === "RED") ||
                     (currentTurn === 1 && myColor === "YELLOW")) &&

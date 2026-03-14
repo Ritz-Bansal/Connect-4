@@ -2,8 +2,24 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Room, WaitingPlayer } from "./types/types";
 import { create_board, gamingEngine } from "./gamingEngine";
 
+const ALLOWED_ORIGINS = [
+    "http://localhost:5173", 
+    "http://localhost:3000",
+    "https://connect-4-alpha-three.vercel.app"
+];
 
-const wss = new WebSocketServer({ port: 8080 });
+const wss = new WebSocketServer({ 
+    port: 8080,
+    verifyClient: (info, done) => {
+        const origin = info.origin;
+        if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+            done(true); // Accept
+        } else {
+            console.log(`Rejected connection from strict origin: ${origin}`);
+            done(false, 403, "Forbidden"); // Reject
+        }
+    }
+});
 
 // ek chiz yeh ki If I want automatic matching, then mein sochra hu ki ek variable bana luga jaha pe
 // waiting player rahega, jaise hi koi dusra player connects, match them automatically, easy and good
@@ -122,10 +138,15 @@ wss.on("connection", (ws: WebSocket) => {
         if(response && response.nextTurn !== undefined){
             room.turn = response.nextTurn;
         }
-         
+        
+        if (response.message == "Incorrect inputs"){
+          ws.send(JSON.stringify(response));
+          return;
+        }
+
         room.players.forEach((player) => {
           player.send(JSON.stringify(response));
-        })
+        });
 
       }
     }catch(error){
