@@ -1,5 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Room, WaitingPlayer } from "./types/types";
+import { create_board, gamingEngine } from "./gamingEngine";
+
 
 const wss = new WebSocketServer({ port: 8080 });
 
@@ -9,7 +11,7 @@ const wss = new WebSocketServer({ port: 8080 });
 
 let waitingPlayer: WaitingPlayer = {
   player: null,
-  roomId: null
+  roomId: null,
 };
 
 // map mein O(1) rahega lookup, array of objects mein O(N) 
@@ -27,6 +29,7 @@ wss.on("connection", (ws: WebSocket) => {
       const data = JSON.parse(message.toString());
       const type = (data.type).toUpperCase();
 
+      console.log(data);
       if(!type){
         ws.send(JSON.stringify({
           message: "Konsa game kheloge"
@@ -34,7 +37,7 @@ wss.on("connection", (ws: WebSocket) => {
       }
   
       if(type == "PLAY_CONNECT_4"){
-  
+        console.log("Inside");
         if(waitingPlayer.player != null && waitingPlayer.roomId != null){
           const roomId = waitingPlayer.roomId;
           const room = rooms.get(roomId);
@@ -52,25 +55,36 @@ wss.on("connection", (ws: WebSocket) => {
   
           waitingPlayer.player = null;
           waitingPlayer.roomId = null;
+          ws.roomId = roomId;
   
           // start the game
-          room.players.forEach((player)=> {
-            player.send(JSON.stringify({
-              message: "Game starting, aajao fas fas"
-            }))
-          })
-          
+          room.players[0]?.send(JSON.stringify({
+            message: "Game starting, aajao fas fas",
+            color: "RED",
+            turn: 0
+          }));
+          room.players[1]?.send(JSON.stringify({
+            message: "Game starting, aajao fas fas",
+            color: "YELLOW",
+            turn: 0
+          }));
+
           return;
         }
   
         const roomId = generateRoomId();
   
         rooms.set(roomId, {
-          players: [ws]
+          players: [ws], 
+          board: create_board(),
+          turn: 0,
+          rowIdx: [5, 5, 5 ,5 ,5, 5, 5], // O(1) TC milegi inse
+          counter: 0
         })
   
         waitingPlayer.player = ws;
         waitingPlayer.roomId = roomId;
+        ws.roomId = roomId;
   
         ws.send(JSON.stringify({
           message: "Waiting for someone to join"
@@ -78,21 +92,73 @@ wss.on("connection", (ws: WebSocket) => {
         
         return;
       }
+
+      if(type == "MOVE"){
+        const roomId = ws.roomId;
+        const room = rooms.get(roomId);
+        const column: number = data.column;
+
+        if(!room){
+          return ws.send(JSON.stringify({
+            message: "Vapas se masti"
+          }));
+        }
+
+        // Must be your turn to play
+        if(room.players[room.turn] !== ws){
+           return ws.send(JSON.stringify({
+             message: "Not your turn"
+           }));
+        }
+
+        if(column === undefined){
+          return ws.send(JSON.stringify({
+            message: "Nahi chalega"
+          }));
+        }
+
+        const response = gamingEngine(room, column, room.turn);
+        
+        if(response && response.nextTurn !== undefined){
+            room.turn = response.nextTurn;
+        }
+         
+        room.players.forEach((player) => {
+          player.send(JSON.stringify(response));
+        })
+
+      }
     }catch(error){
       ws.send(JSON.stringify({
         message: "Goli beta, masti nahi"
-      }))
+      }));
+    }
+  }); 
+
+  ws.on("close", () => {
+    if(waitingPlayer.player === ws){
+      waitingPlayer.player = null;
+      waitingPlayer.roomId = null;
     }
 
-    ws.on("close", () => {
-      if(waitingPlayer.player != null){
-        waitingPlayer.player = null;
-        waitingPlayer.roomId = null;
-      }
-    })
+    console.log("Browser closed");
+    const roomId = ws.roomId;
+    if(!roomId) return;
 
-    })
-  }
-)
+    const room = rooms.get(roomId);
+    if(!room) return;
 
-console.log("WebSocket server running on ws://localhost:8080");
+    if(room.players[0] == ws){
+      room.players[1]?.send(JSON.stringify({
+        message: "You won, player 1 left"
+      }));
+    }else{
+      room.players[0]?.send(JSON.stringify({
+        message: "You won, player 2 left"
+      }));
+    }
+  });
+
+});
+
+console.log("WebSocket server running on 8080");
